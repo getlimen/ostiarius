@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <ProjectReference Include="..\Ostiarius.Application\Ostiarius.Application.csproj" />
+    <ProjectReference Include="..\Ostiarius.Infrastructure\Ostiarius.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

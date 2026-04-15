@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Limen.Contracts/Limen.Contracts.csproj" />
+    <Project Path="src/Ostiarius.API/Ostiarius.API.csproj" />
+    <Project Path="src/Ostiarius.Application/Ostiarius.Application.csproj" />
+    <Project Path="src/Ostiarius.Domain/Ostiarius.Domain.csproj" />
+    <Project Path="src/Ostiarius.Infrastructure/Ostiarius.Infrastructure.csproj" />
+    <Project Path="src/Ostiarius.Tests/Ostiarius.Tests.csproj" />
+  </Folder>
+</Solution>

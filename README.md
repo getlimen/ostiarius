@@ -26,6 +26,18 @@ Admin opt-in to proxy role in Limen UI when enrolling a node.
 
 In active development. See [`limen/docs/superpowers/plans/2026-04-14-plan-04-ostiarius-proxy.md`](https://github.com/getlimen/limen/blob/main/docs/superpowers/plans/2026-04-14-plan-04-ostiarius-proxy.md).
 
+## Development
+
+Local testing without a full compose stack: set `Ostiarius:LimenUrl` to `ws://localhost:5098` and provide a valid `ProxyNodeId` + `AgentSecret` (obtained by enrolling a Limentinus with `proxy` role against limen first). Then `dotnet run` Ostiarius — it will connect, authenticate, and receive any configured routes.
+
+### Sync contracts from limen
+
+Snapshot checked in at `src/Limen.Contracts/`. Re-sync when upstream changes:
+
+```bash
+bash scripts/sync-contracts.sh
+```
+
 ## License
 
 [Apache 2.0](LICENSE)

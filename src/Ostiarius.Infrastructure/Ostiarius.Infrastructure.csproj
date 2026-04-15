@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ostiarius.Domain\Ostiarius.Domain.csproj" />
+    <ProjectReference Include="..\Ostiarius.Application\Ostiarius.Application.csproj" />
+    <ProjectReference Include="..\Limen.Contracts\Limen.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LettuceEncrypt-Archon" Version="2.0.0" />
+  </ItemGroup>
+</Project>

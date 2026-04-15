@@ -3,7 +3,13 @@
 > **Project**: Ostiarius — component of [Limen](https://github.com/getlimen/limen)
 > **Role**: Public-facing reverse proxy with automatic TLS. Runs on `proxy`-role nodes. Receives route config from Limen via WebSocket. Authenticates requests to protected routes locally (Ed25519 JWT verify) — no round-trip to Limen per request.
 
-**For full project context, read [`limen/docs/HANDOFF.md`](https://github.com/getlimen/limen/blob/main/docs/HANDOFF.md).**
+**For full project context, read [`limen/docs/HANDOFF.md`](https://github.com/getlimen/limen/blob/main/docs/HANDOFF.md) and [`limen/docs/CONVENTIONS.md`](https://github.com/getlimen/limen/blob/main/docs/CONVENTIONS.md).**
+
+## Workflow rules (enforced, apply to every repo in `getlimen`)
+
+- **Never work on `main`.** Create issue (labeled) → branch `<type>/<issue>_<PascalCaseName>` → PR (labeled) with `Closes #<issue>` → squash-merge + delete branch.
+- **Use CLI generators whenever one exists.** `dotnet new`, `dotnet ef`, `gh issue create`, `gh pr create`, etc. If you don't know the command, search online before hand-writing boilerplate.
+- **No AI / Claude attribution** in commits or PRs.
 
 ## Etymology
 *Ostiarius* — Latin for **doorkeeper** or **porter**. In ancient Rome, the person whose job was to stand at the door, decide who comes in, and announce visitors. Which is exactly what a reverse proxy does: inspect, authenticate, route.

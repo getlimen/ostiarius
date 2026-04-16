@@ -38,16 +38,11 @@ public sealed class AuthMiddleware
         ctx.Request.Headers.Remove("X-Limen-Auth-Method");
         ctx.Request.Headers.Remove("X-Limen-Resource-Id");
 
-        if (ctx.Request.Path == "/healthz")
-        {
-            await _next(ctx);
-            return;
-        }
-
         var host = ctx.Request.Host.Host;
         var route = _routes.Snapshot().FirstOrDefault(r =>
             string.Equals(r.Hostname, host, StringComparison.OrdinalIgnoreCase));
 
+        // Unmatched-host requests (including healthz on container IP) pass through via this no-matching-RouteSpec branch.
         if (route is null)
         {
             await _next(ctx);

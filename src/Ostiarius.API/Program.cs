@@ -47,8 +47,8 @@ if (useAcme)
 var app = builder.Build();
 
 #region Configure HTTP Pipeline
-app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 app.UseMiddleware<AuthMiddleware>();
+app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 app.MapReverseProxy();
 #endregion
 

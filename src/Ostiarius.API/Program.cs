@@ -1,4 +1,5 @@
 using Ostiarius.Application.Common.Interfaces;
+using Ostiarius.Infrastructure.Auth;
 using Ostiarius.Infrastructure.Control;
 using Ostiarius.Infrastructure.Proxy;
 using Yarp.ReverseProxy.Configuration;
@@ -12,6 +13,11 @@ builder.Services.AddSingleton<IRouteStore, RouteStore>();
 builder.Services.AddSingleton<IProxyConfigProvider, YarpConfigProvider>();
 builder.Services.AddReverseProxy();
 builder.Services.AddHostedService<LimenWebSocketClient>();
+
+builder.Services.AddHttpClient("limen-auth");
+builder.Services.AddSingleton<IJwtVerifier, Ed25519Verifier>();
+builder.Services.AddSingleton<IRevokedTokenCache, RevokedTokenCache>();
+builder.Services.AddHostedService<RevokedTokenPoller>();
 
 var useAcme = builder.Configuration.GetValue<bool>("Acme:Enabled");
 if (useAcme)
@@ -34,6 +40,7 @@ var app = builder.Build();
 
 #region Configure HTTP Pipeline
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+app.UseMiddleware<AuthMiddleware>();
 app.MapReverseProxy();
 #endregion
 

@@ -210,29 +210,14 @@ public sealed class Ed25519Verifier : IJwtVerifier, IDisposable
             claims = new JwtClaims(jti, sub, routeId, authMethod, cookieScope, exp);
             return true;
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (
+            ex is JsonException ||
+            ex is FormatException ||
+            ex is InvalidOperationException ||
+            ex is KeyNotFoundException ||
+            ex is ArgumentException)
         {
-            _log.LogDebug(ex, "JWT verification failed: malformed JSON payload");
-            return false;
-        }
-        catch (FormatException ex)
-        {
-            _log.LogDebug(ex, "JWT verification failed: base64/format error");
-            return false;
-        }
-        catch (InvalidOperationException ex)
-        {
-            _log.LogDebug(ex, "JWT verification failed: missing or invalid claim");
-            return false;
-        }
-        catch (KeyNotFoundException ex)
-        {
-            _log.LogDebug(ex, "JWT verification failed: claim not found");
-            return false;
-        }
-        catch (ArgumentException ex)
-        {
-            _log.LogDebug(ex, "JWT verification failed: argument error");
+            _log.LogDebug(ex, "JWT verification failed: {Message}", ex.Message);
             return false;
         }
     }

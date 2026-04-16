@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Ostiarius.Application.Common.Interfaces;
+using Ostiarius.Infrastructure.Auth;
 using Ostiarius.Infrastructure.Control;
 using Ostiarius.Infrastructure.Proxy;
 using Yarp.ReverseProxy.Configuration;
@@ -6,12 +9,23 @@ using Yarp.ReverseProxy.Configuration;
 var builder = WebApplication.CreateBuilder(args);
 
 #region Configure Services
-builder.Services.Configure<OstiariusControlOptions>(builder.Configuration.GetSection("Ostiarius"));
+builder.Services.AddOptions<OstiariusControlOptions>()
+    .Bind(builder.Configuration.GetSection("Ostiarius"))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<OstiariusControlOptions>, OstiariusControlOptionsValidator>();
 
 builder.Services.AddSingleton<IRouteStore, RouteStore>();
 builder.Services.AddSingleton<IProxyConfigProvider, YarpConfigProvider>();
 builder.Services.AddReverseProxy();
 builder.Services.AddHostedService<LimenWebSocketClient>();
+
+builder.Services.AddHttpClient("limen-auth");
+builder.Services.AddSingleton<IJwtVerifier>(sp => new Ed25519Verifier(
+    sp.GetRequiredService<IOptions<OstiariusControlOptions>>(),
+    sp.GetRequiredService<IHttpClientFactory>(),
+    sp.GetRequiredService<ILogger<Ed25519Verifier>>()));
+builder.Services.AddSingleton<IRevokedTokenCache, RevokedTokenCache>();
+builder.Services.AddHostedService<RevokedTokenPoller>();
 
 var useAcme = builder.Configuration.GetValue<bool>("Acme:Enabled");
 if (useAcme)
@@ -33,6 +47,7 @@ if (useAcme)
 var app = builder.Build();
 
 #region Configure HTTP Pipeline
+app.UseMiddleware<AuthMiddleware>();
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 app.MapReverseProxy();
 #endregion

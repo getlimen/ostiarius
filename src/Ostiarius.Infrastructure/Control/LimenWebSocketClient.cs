@@ -15,6 +15,8 @@ public sealed class OstiariusControlOptions
     public string LimenUrl { get; set; } = string.Empty;
     public string ProxyNodeId { get; set; } = string.Empty;
     public string AgentSecret { get; set; } = string.Empty;
+    public string LimenPublicUrl { get; set; } = string.Empty;
+    public int RevokedPollIntervalSeconds { get; set; } = 30;
 }
 
 public sealed class LimenWebSocketClient : BackgroundService

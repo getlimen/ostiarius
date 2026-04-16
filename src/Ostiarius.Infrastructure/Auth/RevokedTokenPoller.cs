@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -35,11 +34,21 @@ public sealed class RevokedTokenPoller : BackgroundService
             return;
         }
 
-        var interval = TimeSpan.FromSeconds(
-            _options.RevokedPollIntervalSeconds > 0 ? _options.RevokedPollIntervalSeconds : 30);
+        var interval = _options.RevokedPollIntervalSeconds == 0
+            ? TimeSpan.FromSeconds(30)
+            : TimeSpan.FromSeconds(_options.RevokedPollIntervalSeconds);
 
         while (!ct.IsCancellationRequested)
         {
+            try
+            {
+                await PollOnce(ct);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Revoked-token poll failed; keeping stale cache");
+            }
+
             try
             {
                 await Task.Delay(interval, ct);
@@ -48,42 +57,65 @@ public sealed class RevokedTokenPoller : BackgroundService
             {
                 break;
             }
+        }
+    }
 
-            try
+    private async Task PollOnce(CancellationToken ct)
+    {
+        var client = _factory.CreateClient("limen-auth");
+        var url = $"{_options.LimenPublicUrl.TrimEnd('/')}/auth/revoked";
+        var response = await client.GetAsync(url, ct);
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            _log.LogWarning("Empty response from revoked tokens endpoint; keeping stale cache.");
+            return;
+        }
+
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(body);
+        }
+        catch (JsonException ex)
+        {
+            _log.LogWarning(ex, "Non-JSON response from revoked tokens endpoint; keeping stale cache.");
+            return;
+        }
+
+        using (doc)
+        {
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
             {
-                var client = _factory.CreateClient("limen-auth");
-                var url = $"{_options.LimenPublicUrl.TrimEnd('/')}/auth/revoked";
-                var response = await client.GetAsync(url, ct);
-                response.EnsureSuccessStatusCode();
+                _log.LogWarning("Revoked tokens response is not a JSON array (got {Kind}); keeping stale cache.", doc.RootElement.ValueKind);
+                return;
+            }
 
-                using var doc = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
-                if (doc is null)
+            var jtis = new List<Guid>();
+            foreach (var element in doc.RootElement.EnumerateArray())
+            {
+                if (element.ValueKind != JsonValueKind.Object)
                 {
-                    _log.LogWarning("Empty response from revoked tokens endpoint; keeping stale cache.");
                     continue;
                 }
 
-                var jtis = new List<Guid>();
-                foreach (var element in doc.RootElement.EnumerateArray())
+                string? jtiStr = null;
+                if (element.TryGetProperty("jti", out var jtiProp) || element.TryGetProperty("Jti", out jtiProp))
                 {
-                    var jtiStr = element.GetProperty("jti").GetString();
-                    if (Guid.TryParse(jtiStr, out var jti))
-                    {
-                        jtis.Add(jti);
-                    }
+                    jtiStr = jtiProp.GetString();
                 }
 
-                _cache.Replace(jtis);
-                _log.LogDebug("Refreshed revoked token cache: {Count} entries", jtis.Count);
+                if (Guid.TryParse(jtiStr, out var jti))
+                {
+                    jtis.Add(jti);
+                }
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _log.LogWarning(ex, "Failed to refresh revoked token cache; keeping stale cache.");
-            }
+
+            _cache.Replace(jtis);
+            _log.LogDebug("Refreshed revoked token cache: {Count} entries", jtis.Count);
         }
     }
 }

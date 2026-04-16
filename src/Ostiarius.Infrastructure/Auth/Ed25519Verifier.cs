@@ -242,7 +242,6 @@ public sealed class Ed25519Verifier : IJwtVerifier, IDisposable
         _disposeCts.Cancel();
         _disposeCts.Dispose();
         _loadLock.Dispose();
-        _publicKey?.Dispose();
     }
 
     private static byte[] Base64UrlDecode(string s)

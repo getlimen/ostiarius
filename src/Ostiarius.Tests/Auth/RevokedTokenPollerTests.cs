@@ -37,7 +37,7 @@ public sealed class RevokedTokenPollerTests
     {
         var jti1 = Guid.NewGuid();
         var jti2 = Guid.NewGuid();
-        var body = $"""[{{"jti":"{jti1}"}},{{"jti":"{jti2}"}}]""";
+        var body = $"[{{\"jti\":\"{jti1}\"}},{{\"jti\":\"{jti2}\"}}]";
         var (poller, cache) = CreatePoller(body);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));

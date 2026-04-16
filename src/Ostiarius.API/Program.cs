@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Ostiarius.Application.Common.Interfaces;
 using Ostiarius.Infrastructure.Auth;
@@ -19,7 +20,10 @@ builder.Services.AddReverseProxy();
 builder.Services.AddHostedService<LimenWebSocketClient>();
 
 builder.Services.AddHttpClient("limen-auth");
-builder.Services.AddSingleton<IJwtVerifier, Ed25519Verifier>();
+builder.Services.AddSingleton<IJwtVerifier>(sp => new Ed25519Verifier(
+    sp.GetRequiredService<IOptions<OstiariusControlOptions>>(),
+    sp.GetRequiredService<IHttpClientFactory>(),
+    sp.GetRequiredService<ILogger<Ed25519Verifier>>()));
 builder.Services.AddSingleton<IRevokedTokenCache, RevokedTokenCache>();
 builder.Services.AddHostedService<RevokedTokenPoller>();
 

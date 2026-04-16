@@ -9,7 +9,7 @@ using Ostiarius.Infrastructure.Control;
 
 namespace Ostiarius.Infrastructure.Auth;
 
-public sealed class Ed25519Verifier : IJwtVerifier
+public sealed class Ed25519Verifier : IJwtVerifier, IDisposable
 {
     private readonly OstiariusControlOptions _options;
     private readonly IHttpClientFactory _factory;
@@ -18,6 +18,9 @@ public sealed class Ed25519Verifier : IJwtVerifier
     private PublicKey? _publicKey;
     private string? _kid;
     private readonly SemaphoreSlim _loadLock = new(1, 1);
+
+    // CTS used to cancel background retry loop on disposal.
+    private readonly CancellationTokenSource _disposeCts = new();
 
     public Ed25519Verifier(
         IOptions<OstiariusControlOptions> options,
@@ -51,26 +54,7 @@ public sealed class Ed25519Verifier : IJwtVerifier
             {
                 try
                 {
-                    var client = _factory.CreateClient("limen-auth");
-                    var url = $"{_options.LimenPublicUrl.TrimEnd('/')}/auth/public-key";
-                    var response = await client.GetAsync(url, ct);
-                    response.EnsureSuccessStatusCode();
-
-                    using var doc = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
-                    if (doc is null)
-                    {
-                        throw new InvalidOperationException("Empty response from public key endpoint.");
-                    }
-
-                    var root = doc.RootElement;
-                    var kid = root.GetProperty("kid").GetString() ?? throw new InvalidOperationException("Missing kid.");
-                    var publicKeyBase64 = root.GetProperty("publicKey").GetString() ?? throw new InvalidOperationException("Missing publicKey.");
-                    var keyBytes = Convert.FromBase64String(publicKeyBase64);
-
-                    _publicKey = PublicKey.Import(SignatureAlgorithm.Ed25519, keyBytes, KeyBlobFormat.RawPublicKey);
-                    _kid = kid;
-
-                    _log.LogInformation("Loaded Limen Ed25519 public key kid={Kid}", kid);
+                    await TryFetchOnceAsync(ct);
                     return;
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -99,12 +83,92 @@ public sealed class Ed25519Verifier : IJwtVerifier
                 }
             }
 
-            _log.LogError("Could not load Limen public key within 5 minutes; JWT verification disabled until next reload.");
+            _log.LogError("Could not load Limen public key within 5 minutes; JWT verification disabled. Background retry scheduled every 5 minutes.");
+
+            // Start a background loop that retries every 5 minutes until the key is loaded
+            // or the verifier is disposed. This makes the verifier self-healing after a
+            // temporary Limen outage at boot time.
+            _ = BackgroundRetryAsync(_disposeCts.Token);
         }
         finally
         {
             _loadLock.Release();
         }
+    }
+
+    private async Task BackgroundRetryAsync(CancellationToken ct)
+    {
+        while (_publicKey is null && !ct.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMinutes(5), ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await _loadLock.WaitAsync(ct);
+            try
+            {
+                if (_publicKey is not null)
+                {
+                    return;
+                }
+
+                try
+                {
+                    await TryFetchOnceAsync(ct);
+                    if (_publicKey is not null)
+                    {
+                        _log.LogInformation("Limen public key loaded via background retry");
+                        return;
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _log.LogWarning(ex, "Background public-key retry failed; will try again in 5 min");
+                }
+            }
+            finally
+            {
+                _loadLock.Release();
+            }
+        }
+    }
+
+    private async Task TryFetchOnceAsync(CancellationToken ct)
+    {
+        var client = _factory.CreateClient("limen-auth");
+        var url = $"{_options.LimenPublicUrl.TrimEnd('/')}/auth/public-key";
+        var response = await client.GetAsync(url, ct);
+        response.EnsureSuccessStatusCode();
+
+        using var doc = await response.Content.ReadFromJsonAsync<JsonDocument>(ct);
+        if (doc is null)
+        {
+            throw new InvalidOperationException("Empty response from public key endpoint.");
+        }
+
+        var root = doc.RootElement;
+        var kid = root.GetProperty("kid").GetString() ?? throw new InvalidOperationException("Missing kid.");
+        var publicKeyBase64 = root.GetProperty("publicKey").GetString() ?? throw new InvalidOperationException("Missing publicKey.");
+        var keyBytes = Convert.FromBase64String(publicKeyBase64);
+
+        _publicKey = PublicKey.Import(SignatureAlgorithm.Ed25519, keyBytes, KeyBlobFormat.RawPublicKey);
+        _kid = kid;
+
+        _log.LogInformation("Loaded Limen Ed25519 public key kid={Kid}", kid);
     }
 
     public bool TryVerify(string jwt, out JwtClaims? claims)
@@ -146,11 +210,39 @@ public sealed class Ed25519Verifier : IJwtVerifier
             claims = new JwtClaims(jti, sub, routeId, authMethod, cookieScope, exp);
             return true;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
-            _log.LogDebug(ex, "JWT verification failed");
+            _log.LogDebug(ex, "JWT verification failed: malformed JSON payload");
             return false;
         }
+        catch (FormatException ex)
+        {
+            _log.LogDebug(ex, "JWT verification failed: base64/format error");
+            return false;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogDebug(ex, "JWT verification failed: missing or invalid claim");
+            return false;
+        }
+        catch (KeyNotFoundException ex)
+        {
+            _log.LogDebug(ex, "JWT verification failed: claim not found");
+            return false;
+        }
+        catch (ArgumentException ex)
+        {
+            _log.LogDebug(ex, "JWT verification failed: argument error");
+            return false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposeCts.Cancel();
+        _disposeCts.Dispose();
+        _loadLock.Dispose();
+        _publicKey?.Dispose();
     }
 
     private static byte[] Base64UrlDecode(string s)

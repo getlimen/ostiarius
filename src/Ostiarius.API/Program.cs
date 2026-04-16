@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Ostiarius.Application.Common.Interfaces;
 using Ostiarius.Infrastructure.Auth;
 using Ostiarius.Infrastructure.Control;
@@ -7,7 +8,10 @@ using Yarp.ReverseProxy.Configuration;
 var builder = WebApplication.CreateBuilder(args);
 
 #region Configure Services
-builder.Services.Configure<OstiariusControlOptions>(builder.Configuration.GetSection("Ostiarius"));
+builder.Services.AddOptions<OstiariusControlOptions>()
+    .Bind(builder.Configuration.GetSection("Ostiarius"))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<OstiariusControlOptions>, OstiariusControlOptionsValidator>();
 
 builder.Services.AddSingleton<IRouteStore, RouteStore>();
 builder.Services.AddSingleton<IProxyConfigProvider, YarpConfigProvider>();

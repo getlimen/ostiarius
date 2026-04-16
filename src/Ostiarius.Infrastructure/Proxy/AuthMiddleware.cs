@@ -94,7 +94,12 @@ public sealed class AuthMiddleware
         }
 
         ctx.Request.Headers["X-Limen-User-Id"] = claims.Subject;
-        ctx.Request.Headers["X-Limen-User-Email"] = claims.Subject;
+        // Subject is the email for password/allowlist flows; for SSO the IdP returns a stable id that may not be an email.
+        // Until limen exposes an explicit Email claim, only set X-Limen-User-Email when we can trust Subject is an email.
+        if (claims.AuthMethod == "password" || claims.AuthMethod == "allowlist")
+        {
+            ctx.Request.Headers["X-Limen-User-Email"] = claims.Subject;
+        }
         ctx.Request.Headers["X-Limen-Auth-Method"] = claims.AuthMethod;
         ctx.Request.Headers["X-Limen-Resource-Id"] = claims.RouteId.ToString();
 

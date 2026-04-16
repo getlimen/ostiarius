@@ -313,22 +313,58 @@ public sealed class AuthMiddlewareTests
     }
 
     [Fact]
-    public async Task HealthzPath_CallsNext_WithoutAuth()
+    public async Task SsoAuthMethod_DoesNotSetUserEmailHeader()
     {
         var nextCalled = false;
         RequestDelegate next = _ => { nextCalled = true; return Task.CompletedTask; };
 
-        var route = MakeRoute("app.example.com", "jwt");
+        var routeId = Guid.NewGuid();
+        var jti = Guid.NewGuid();
+        var route = MakeRoute("app.example.com", "jwt", routeId);
         var routes = Substitute.For<IRouteStore>();
         routes.Snapshot().Returns(new[] { route });
+
+        var claims = new JwtClaims(jti, "idp-stable-user-id-not-an-email", routeId, "sso", "strict",
+            DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds());
+
+        var verifier = Substitute.For<IJwtVerifier>();
+        verifier.TryVerify("sso-token", out Arg.Any<JwtClaims?>()).Returns(x =>
+        {
+            x[1] = claims;
+            return true;
+        });
+
+        var revoked = Substitute.For<IRevokedTokenCache>();
+        revoked.IsRevoked(jti).Returns(false);
+
+        var middleware = CreateMiddleware(next, routes, verifier, revoked);
+        var ctx = MakeContext("app.example.com", "sso-token");
+
+        await middleware.InvokeAsync(ctx);
+
+        nextCalled.Should().BeTrue();
+        ctx.Request.Headers["X-Limen-User-Id"].ToString().Should().Be("idp-stable-user-id-not-an-email");
+        ctx.Request.Headers.ContainsKey("X-Limen-User-Email").Should().BeFalse();
+        ctx.Request.Headers["X-Limen-Auth-Method"].ToString().Should().Be("sso");
+    }
+
+    [Fact]
+    public async Task UnmatchedHost_PassesThroughWithoutAuth()
+    {
+        var nextCalled = false;
+        RequestDelegate next = _ => { nextCalled = true; return Task.CompletedTask; };
+
+        var routes = Substitute.For<IRouteStore>();
+        routes.Snapshot().Returns(Array.Empty<RouteSpec>());
 
         var verifier = Substitute.For<IJwtVerifier>();
         var revoked = Substitute.For<IRevokedTokenCache>();
 
         var middleware = CreateMiddleware(next, routes, verifier, revoked);
 
+        // Simulate healthz-on-container-IP or any other unmatched-host request
         var ctx = new DefaultHttpContext();
-        ctx.Request.Host = new HostString("app.example.com");
+        ctx.Request.Host = new HostString("172.17.0.2");
         ctx.Request.Path = "/healthz";
 
         await middleware.InvokeAsync(ctx);

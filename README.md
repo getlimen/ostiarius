@@ -1,42 +1,28 @@
 # Ostiarius
 
-> *Latin: doorkeeper / porter* — the Roman slave whose job was to stand at the door, inspect visitors, and decide who enters.
+> *Latin: "doorkeeper"* — the person who stands at the door, decides who enters, and announces visitors.
 
-Ostiarius is the **reverse proxy** component of [Limen](https://github.com/getlimen/limen). It terminates public TLS, routes HTTP(S) traffic through WireGuard tunnels to backend services, and enforces resource-level authentication (password / SSO / email allowlist).
+**Ostiarius** is the public-facing reverse proxy component of [Limen](https://github.com/getlimen/limen). It terminates TLS, routes traffic via YARP, and enforces per-route authentication (Ed25519 JWT verification, revocation polling).
 
-## Role in the Limen platform
+## Not installed directly
 
-- **Listens on:** 80 (ACME HTTP-01) + 443 (TLS)
-- **Configured by:** Limen via JSON-over-WebSocket (`/api/proxies/ws`)
-- **TLS:** Let's Encrypt via [LettuceEncrypt-Archon](https://github.com/Archon-maintainer/LettuceEncrypt-Archon)
-- **Routing engine:** [YARP](https://github.com/dotnet/yarp)
-- **Auth:** Ed25519-signed JWT verified locally (no round-trip to Limen per request)
+Ostiarius is automatically deployed by [Limentinus](https://github.com/getlimen/limentinus) on nodes with the `proxy` role. You don't need to manage it manually.
 
-## How it's installed
+## Features
 
-**You don't install Ostiarius directly.** It's brought up automatically by [Limentinus](https://github.com/getlimen/limentinus) on any node with the `proxy` role.
-
-Admin opt-in to proxy role in Limen UI when enrolling a node.
+- **YARP-based reverse proxy** — hostname routing from Limen config
+- **Automatic TLS** via LettuceEncrypt-Archon (ACME/Let's Encrypt)
+- **Resource authentication** — Ed25519 JWT verify + revocation cache; password, magic-link, SSO flows
+- **Identity headers** — injects `X-Limen-User-*` headers to upstream services
+- **Config via WebSocket** — auto-reconnecting control channel to Limen
 
 ## Tech stack
 
-.NET 10 / NativeAOT • Kestrel + YARP • LettuceEncrypt-Archon • System.Net.WebSockets • NSec.Cryptography (Ed25519)
+.NET 10 / ASP.NET Core • NativeAOT • YARP • NSec.Cryptography (Ed25519)
 
-## Status
+## Architecture
 
-In active development. See [`limen/docs/superpowers/plans/2026-04-14-plan-04-ostiarius-proxy.md`](https://github.com/getlimen/limen/blob/main/docs/superpowers/plans/2026-04-14-plan-04-ostiarius-proxy.md).
-
-## Development
-
-Local testing without a full compose stack: set `Ostiarius:LimenUrl` to `ws://localhost:5098` and provide a valid `ProxyNodeId` + `AgentSecret` (obtained by enrolling a Limentinus with `proxy` role against limen first). Then `dotnet run` Ostiarius — it will connect, authenticate, and receive any configured routes.
-
-### Sync contracts from limen
-
-Snapshot checked in at `src/Limen.Contracts/`. Re-sync when upstream changes:
-
-```bash
-bash scripts/sync-contracts.sh
-```
+See the [Limen design spec](https://github.com/getlimen/limen/blob/main/docs/superpowers/specs/2026-04-14-limen-design.md).
 
 ## License
 
